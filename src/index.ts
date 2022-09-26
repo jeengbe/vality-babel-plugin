@@ -21,9 +21,9 @@ function visit(path: NodePath<t.Node>) {
 function visitMemberExpression(path: NodePath<t.MemberExpression>) {
   const { node } = path;
   if (isGuard(node)) {
-    path.replaceWith(t.callExpression(node, []));
+    path.replaceWith(t.callExpression(node, [t.objectExpression([])]));
   } else if (isValit(node)) {
-    path.replaceWith(t.callExpression(t.callExpression(node, []), []));
+    path.replaceWith(t.callExpression(t.callExpression(node, []), [t.objectExpression([])]));
   }
 
   return path.skip();
@@ -45,7 +45,7 @@ function visitCallExpression(path: NodePath<t.CallExpression>) {
     return path.skip();
   }
 
-  path.replaceWith(t.callExpression(path.node, []));
+  path.replaceWith(t.callExpression(path.node, [t.objectExpression([])]));
   return path.skip();
 }
 
