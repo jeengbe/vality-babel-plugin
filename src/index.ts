@@ -7,6 +7,11 @@ export default (): PluginObj => ({
     MemberExpression: visitMemberExpression,
     CallExpression: visitCallExpression,
     ArrayExpression: visitArrayExpression,
+    ObjectExpression: visitObjectExpression,
+    StringLiteral: visitLiteral,
+    NumericLiteral: visitLiteral,
+    BooleanLiteral: visitLiteral,
+    NullLiteral: visitLiteral,
   },
 });
 
@@ -18,6 +23,17 @@ function visit(path: NodePath<t.Node>) {
       return visitCallExpression(path as NodePath<t.CallExpression>);
     case "ArrayExpression":
       return visitArrayExpression(path as NodePath<t.ArrayExpression>);
+    case "ObjectExpression":
+      return visitObjectExpression(path as NodePath<t.ObjectExpression>);
+    case "StringLiteral":
+    case "NumericLiteral":
+    case "BooleanLiteral":
+    case "NullLiteral":
+      return visitLiteral(
+        path as NodePath<
+          t.StringLiteral | t.NumericLiteral | t.BooleanLiteral | t.NullLiteral
+        >
+      );
   }
 }
 
@@ -96,6 +112,33 @@ function visitArrayExpression(path: NodePath<t.ArrayExpression>) {
   return path.skip();
 }
 
+function visitObjectExpression(path: NodePath<t.ObjectExpression>) {
+  if (!containsValitOrGuard(path)) return path.skip();
+
+  const { node } = path;
+
+  for (let i = 0; i < node.properties.length; i++) {
+    if (!node.properties[i]) continue;
+
+    visit(
+      (path.get("properties") as NodePath<t.Node>[])[i].get(
+        "value"
+      ) as NodePath<t.Node>
+    );
+  }
+
+  path.replaceWith(
+    t.callExpression(
+      t.callExpression(
+        t.memberExpression(t.identifier("v"), t.identifier("object")),
+        [node]
+      ),
+      [t.objectExpression([])]
+    )
+  );
+  return path.skip();
+}
+
 function containsValitOrGuard(path: NodePath<t.Node>): boolean {
   const { node } = path;
 
@@ -114,6 +157,40 @@ function containsValitOrGuard(path: NodePath<t.Node>): boolean {
       return containsValitOrGuard(path.get("callee") as NodePath<t.Node>);
     case "MemberExpression":
       return isValit(node) || isGuard(node);
+    default:
+      return false;
+  }
+}
+
+function visitLiteral(path: NodePath<t.StringLiteral | t.NumericLiteral | t.BooleanLiteral | t.NullLiteral>) {
+  if (!parentContainsValitOrGuard(path)) return path.skip();
+
+  path.replaceWith(
+    t.callExpression(
+      t.callExpression(
+        t.memberExpression(t.identifier("v"), t.identifier("literal")),
+        [path.node]
+      ),
+      [t.objectExpression([])]
+    )
+  );
+  return path.skip();
+}
+
+function parentContainsValitOrGuard(path: NodePath<t.Node>): boolean {
+  const { parentPath } = path;
+
+  if (!parentPath) return false;
+
+  switch (parentPath.type) {
+    case "ArrayExpression":
+      return containsValitOrGuard(parentPath) || parentContainsValitOrGuard(parentPath);
+    case "ObjectExpression":
+      return containsValitOrGuard(parentPath) || parentContainsValitOrGuard(parentPath);
+    case "ObjectProperty":
+      return parentContainsValitOrGuard(parentPath);
+    case "MemberExpression":
+      return containsValitOrGuard(parentPath) || parentContainsValitOrGuard(parentPath);
     default:
       return false;
   }
